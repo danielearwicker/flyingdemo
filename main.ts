@@ -12,18 +12,67 @@ enum KeyCode {
     Z = 90
 }
 
-function getKeyStates(): (key: KeyCode) => boolean {
-    var keyStates: boolean[] = [];
+enum Control {
+    YawLeft,
+    YawRight,
+    RollLeft,
+    RollRight,
+    PitchUp,
+    PitchDown,
+    MainForward,
+    MainReverse
+}
+
+var controls = [
+    { key: KeyCode.left,    selector: '.thruster.yaw.left',     control: Control.YawLeft        },
+    { key: KeyCode.right,   selector: '.thruster.yaw.right',    control: Control.YawRight       },
+    { key: KeyCode.A,       selector: '.thruster.roll.left',    control: Control.RollLeft       },
+    { key: KeyCode.S,       selector: '.thruster.roll.right',   control: Control.RollRight      },
+    { key: KeyCode.up,      selector: '.thruster.pitch.up',     control: Control.PitchUp        },
+    { key: KeyCode.down,    selector: '.thruster.pitch.down',   control: Control.PitchDown      },
+    { key: KeyCode.Z,       selector: '.thruster.main.left',    control: Control.MainForward    },
+    { key: KeyCode.X,       selector: '.thruster.main.right',   control: Control.MainReverse    },
+];
+
+function getControlStates(): (control: Control) => boolean {
+    
+    var controlStates: { [c: number]: boolean } = {};
+    var controlsByKeyCode: { [k: number]: Control } = {};
+    var elementsByControl: { [c: number]: Element } = {};
+    
+    function update(ctrl: Control, state: boolean) {
+        controlStates[ctrl] = state;
+        var el = <any>elementsByControl[ctrl];        
+        if (state) {
+            if (el.className.indexOf('firing') === -1) {
+                el.className += ' firing';
+            }
+        } else {
+            el.className = el.className.replace(/firing/, '');
+        }
+    }
     
     document.addEventListener('keydown', function(ev) {
-        keyStates[ev.keyCode] = true;
+        update(controlsByKeyCode[ev.keyCode], true);
     });
 
     document.addEventListener('keyup', function(ev) {
-        keyStates[ev.keyCode] = false;
+        update(controlsByKeyCode[ev.keyCode], false);
+    });
+
+    controls.forEach(function(def) {
+        controlsByKeyCode[def.key] = def.control;
+        var el = document.querySelector(def.selector);
+        elementsByControl[def.control] = el;        
+        el.addEventListener("touchstart", function() {
+            update(def.control, true);
+        });
+        el.addEventListener("touchend", function() {
+            update(def.control, false);
+        });
     });
     
-    return key => keyStates[key];
+    return ctrl => controlStates[ctrl];
 };
 
 function main() {
@@ -54,8 +103,10 @@ function main() {
         shading: THREE.FlatShading 
     });
     
-    for (var x = -20; x < 20; x++) {
-        for (var y = -20; y < 20; y++) {
+    var count = 20;
+    
+    for (var x = -count; x < count; x++) {
+        for (var y = -count; y < count; y++) {
             
             var height = 0.2 + (Math.random() * 2.5);
             
@@ -111,34 +162,34 @@ function main() {
         q.multiply(r); 
     }
 
-    var keyStates = getKeyStates();
+    var controlStates = getControlStates();
     
     function render() {
 
-        if (keyStates(KeyCode.A)) {
+        if (controlStates(Control.RollLeft)) {
             roll -= 0.0001;
-        } else if (keyStates(KeyCode.S)) {
+        } else if (controlStates(Control.RollRight)) {
             roll += 0.0001;
         }
         
-        if (keyStates(KeyCode.down)) {
+        if (controlStates(Control.PitchDown)) {
             pitch -= 0.0001;
-        } else if (keyStates(KeyCode.up)) {
+        } else if (controlStates(Control.PitchUp)) {
             pitch += 0.0001;
         }
 
-        if (keyStates(KeyCode.left)) {
+        if (controlStates(Control.YawLeft)) {
             yaw -= 0.0001;
-        } else if (keyStates(KeyCode.right)) {
+        } else if (controlStates(Control.YawRight)) {
             yaw += 0.0001;
         }
 
-        if (keyStates(KeyCode.X)) {            
+        if (controlStates(Control.MainForward)) {
             var accelleration = new THREE.Vector3(0, 0, -0.0001);
             accelleration.applyQuaternion(orientation);
             velocity.add(accelleration);
             
-        } else if (keyStates(KeyCode.Z)) {
+        } else if (controlStates(Control.MainReverse)) {
             var accelleration = new THREE.Vector3(0, 0, 0.0001);
             accelleration.applyQuaternion(orientation);
             velocity.add(accelleration);
