@@ -1,79 +1,37 @@
 /// <reference path="three.d.ts"/>
 
-enum KeyCode {
-    left = 37,
-    up = 38,
-    right = 39,
-    down = 40,
-    space = 32,
-    A = 65,
-    S = 83,
-    X = 88,
-    Z = 90
+interface Touch {
+    pageX: number; 
+    pageY: number;
 }
 
-enum Control {
-    YawLeft,
-    YawRight,
-    RollLeft,
-    RollRight,
-    PitchUp,
-    PitchDown,
-    MainForward,
-    MainReverse
+interface TouchEvent extends UIEvent {
+    touches: Touch[];    
 }
 
-var controls = [
-    { key: KeyCode.left,    selector: '.thruster.yaw.left',     control: Control.YawLeft        },
-    { key: KeyCode.right,   selector: '.thruster.yaw.right',    control: Control.YawRight       },
-    { key: KeyCode.A,       selector: '.thruster.roll.left',    control: Control.RollLeft       },
-    { key: KeyCode.S,       selector: '.thruster.roll.right',   control: Control.RollRight      },
-    { key: KeyCode.up,      selector: '.thruster.pitch.up',     control: Control.PitchUp        },
-    { key: KeyCode.down,    selector: '.thruster.pitch.down',   control: Control.PitchDown      },
-    { key: KeyCode.Z,       selector: '.thruster.main.left',    control: Control.MainForward    },
-    { key: KeyCode.X,       selector: '.thruster.main.right',   control: Control.MainReverse    },
-];
+interface Element {
+    innerHTML: string;
+}
 
-function getControlStates(): (control: Control) => boolean {
-    
-    var controlStates: { [c: number]: boolean } = {};
-    var controlsByKeyCode: { [k: number]: Control } = {};
-    var elementsByControl: { [c: number]: Element } = {};
-    
-    function update(ctrl: Control, state: boolean) {
-        controlStates[ctrl] = state;
-        var el = <any>elementsByControl[ctrl];        
-        if (state) {
-            if (el.className.indexOf('firing') === -1) {
-                el.className += ' firing';
-            }
-        } else {
-            el.className = el.className.replace(/firing/, '');
-        }
+function touchArray(touches: Touch[]) {
+    var ar: Touch[] = [];
+    for (var n = 0; n < touches.length; n++) {
+        ar.push({ pageX: touches[n].pageX, pageY: touches[n].pageY });
     }
-    
-    document.addEventListener('keydown', function(ev) {
-        update(controlsByKeyCode[ev.keyCode], true);
-    });
+    return ar;
+}
 
-    document.addEventListener('keyup', function(ev) {
-        update(controlsByKeyCode[ev.keyCode], false);
-    });
-
-    controls.forEach(function(def) {
-        controlsByKeyCode[def.key] = def.control;
-        var el = document.querySelector(def.selector);
-        elementsByControl[def.control] = el;        
-        el.addEventListener("touchstart", function() {
-            update(def.control, true);
-        });
-        el.addEventListener("touchend", function() {
-            update(def.control, false);
-        });
-    });
+function log(touches: Touch[], label: string) {
     
-    return ctrl => controlStates[ctrl];
-};
+    return;
+    var div = document.querySelector('.log');    
+    div.innerHTML = '<p>' + label + '</p>' +  
+        '<ul>' + 
+            touches.map(t => 
+                '<li>' + t.pageX + ', ' + t.pageY + '</li>'
+            ).join('') +
+        '</ul>';
+}
 
 function main() {
 
@@ -83,7 +41,7 @@ function main() {
         yaw = 0;
 
     var scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2('black', 0.01);
+    //scene.fog = new THREE.FogExp2('black', 0.01);
 
     var hemiLight = new THREE.HemisphereLight(0xffffff, 1, 1);
     hemiLight.position.set(0, 1, 1);
@@ -91,6 +49,8 @@ function main() {
 
     var viewport = document.querySelector('.viewport');
     var renderer = new THREE.WebGLRenderer();
+    
+    renderer.setClearColor(0, 1);
     renderer.setSize(viewport.clientWidth, viewport.clientHeight);
     renderer.autoClear = false;
     viewport.appendChild(renderer.domElement);
@@ -103,7 +63,7 @@ function main() {
         shading: THREE.FlatShading 
     });
     
-    var count = 20;
+    var count = 10;
     
     for (var x = -count; x < count; x++) {
         for (var y = -count; y < count; y++) {
@@ -144,7 +104,7 @@ function main() {
     
     var overviewSize = 300;
     var overviewCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-    overviewCamera.position.z = 50;
+    overviewCamera.position.z = 30;
     overviewCamera.position.y = 10;
     
     renderer.enableScissorTest(true);
@@ -162,39 +122,87 @@ function main() {
         q.multiply(r); 
     }
 
-    var controlStates = getControlStates();
+    var previousTouches: { pageX: number; pageY: number; }[];
+        
+    document.addEventListener("touchstart", (ev: TouchEvent) => {
+        ev.preventDefault();
+        var touches = touchArray(ev.touches);
+        log(touches, 'start');
+        previousTouches = touches;
+    });
+    document.addEventListener("touchend", (ev: TouchEvent) => {
+        ev.preventDefault();
+        previousTouches = null;  
+    });    
+    document.addEventListener("touchmove", (ev: TouchEvent) => {        
+        ev.preventDefault();
+        var touches = touchArray(ev.touches);
+        
+        var label = 'move';
+        
+        if (previousTouches && previousTouches.length == ev.touches.length) {
+            
+            switch (touches.length) {
+                case 1:
+                    var o = previousTouches[0],
+                        n = touches[0],
+                        dx = n.pageX - o.pageX,
+                        dy = n.pageY - o.pageY,
+                        s = 0.0001;
+                    
+                    yaw -= dx * s;
+                    pitch -= dy * s;
+                    
+                    label = dx + ', ' + dy;                    
+                    break;
+                
+                case 2:
+                    var o1 = previousTouches[0],
+                        n1 = touches[0],
+                        o2 = previousTouches[1],
+                        n2 = touches[1],
+                        ox = o1.pageX - o2.pageX,
+                        oy = o1.pageY - o2.pageY,
+                        nx = n1.pageX - n2.pageX,
+                        ny = n1.pageY - n2.pageY,                        
+                        oa = Math.atan2(oy, ox),
+                        na = Math.atan2(ny, nx),
+                        or = Math.sqrt((ox * ox) + (oy * oy)),
+                        nr = Math.sqrt((nx * nx) + (ny * ny));
+                        
+                    label = oa + ', ' + na + ' = ' + (na - oa);
+                    
+                    var a = (na - oa);
+                    if (Math.abs(a) > Math.PI) {
+                        if (a > 0) {
+                            a -= 2*Math.PI;
+                        } else {
+                            a += 2*Math.PI;
+                        }
+                    }
+                    
+                    roll -= a * 0.05;
+                    
+                    var accelleration = new THREE.Vector3(0, 0, (nr - or) * -0.0002);
+                    accelleration.applyQuaternion(orientation);
+                    velocity.add(accelleration);                    
+                    break;
+            }
+        }
+        
+        log(touches, label);
+        
+        previousTouches = touches;        
+    });
     
     function render() {
 
-        if (controlStates(Control.RollLeft)) {
-            roll -= 0.0001;
-        } else if (controlStates(Control.RollRight)) {
-            roll += 0.0001;
-        }
+        roll *= 0.95;
+        pitch *= 0.95;
+        yaw *= 0.95;
         
-        if (controlStates(Control.PitchDown)) {
-            pitch -= 0.0001;
-        } else if (controlStates(Control.PitchUp)) {
-            pitch += 0.0001;
-        }
-
-        if (controlStates(Control.YawLeft)) {
-            yaw -= 0.0001;
-        } else if (controlStates(Control.YawRight)) {
-            yaw += 0.0001;
-        }
-
-        if (controlStates(Control.MainForward)) {
-            var accelleration = new THREE.Vector3(0, 0, -0.0001);
-            accelleration.applyQuaternion(orientation);
-            velocity.add(accelleration);
-            
-        } else if (controlStates(Control.MainReverse)) {
-            var accelleration = new THREE.Vector3(0, 0, 0.0001);
-            accelleration.applyQuaternion(orientation);
-            velocity.add(accelleration);
-        }
-
+        velocity.multiplyScalar(0.97);
+        
         rotate(orientation, rollAxis, roll);
         rotate(orientation, pitchAxis, pitch);
         rotate(orientation, yawAxis, yaw);
